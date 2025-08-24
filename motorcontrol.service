@@ -1,0 +1,23 @@
+[Unit]
+Description=Robot Motor Control Web Server
+After=network.target
+
+[Service]
+Type=simple
+User=albert
+WorkingDirectory=/home/albert
+ExecStart=/usr/bin/python3 /home/albert/motorcontrol.py
+Restart=always
+RestartSec=5
+
+# Log to RAM
+StandardOutput=append:/run/motorcontrol.log
+StandardError=append:/run/motorcontrol.log
+
+# Create log file in RAM if it doesn't exist
+RuntimeDirectory=motorcontrol
+RuntimeDirectoryMode=0755
+
+[Install]
+WantedBy=multi-user.target
+

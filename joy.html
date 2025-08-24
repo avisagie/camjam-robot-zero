@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <title>Robot Control</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            touch-action: none;
+            background: #f0f0f0;
+        }
+        
+        #joystick-area {
+            width: 300px;
+            height: 300px;
+            background: #fff;
+            border-radius: 50%;
+            position: relative;
+            border: 2px solid #ccc;
+            touch-action: none;
+            margin: 20px;
+        }
+        
+        #stick {
+            width: 40px;
+            height: 40px;
+            background: #007bff;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            touch-action: none;
+        }
+        
+        #status {
+            margin-top: 20px;
+            font-family: monospace;
+        }
+        
+        .button {
+            padding: 15px 30px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            background: #007bff;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        
+        .button:active {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Robot Control</h1>
+    <div id="joystick-area">
+        <div id="stick"></div>
+    </div>
+    <div id="status">Stopped</div>
+    <button id="stop" class="button">STOP</button>
+
+    <script>
+        const scaleFactor = 300.0 / (300-40);
+        const joystickArea = document.getElementById('joystick-area');
+        const stick = document.getElementById('stick');
+        const status = document.getElementById('status');
+        const stopBtn = document.getElementById('stop');
+        
+        let isDragging = false;
+        let centerX, centerY;
+        let maxDistance;
+        
+        // Command throttling state
+        let lastCommand = { left: 0, right: 0 };
+        let lastCommandTime = 0;
+        let commandPending = false;
+        let animationFrameId = null;
+        let lastMoveTime = 0;
+        const THROTTLE_MS = 200;  // Minimum time between commands
+        const IDLE_TIMEOUT_MS = 200;  // Send one more command after movement stops
+        
+        function initJoystick() {
+            const rect = joystickArea.getBoundingClientRect();
+            centerX = rect.width / 2;
+            centerY = rect.height / 2;
+            maxDistance = scaleFactor * (rect.width / 2 - stick.offsetWidth / 2);
+            moveStick(centerX, centerY);
+        }
+        
+        function deadzone(n, dz) {
+            return Math.sign(n) * (Math.max(0, Math.abs(n) - dz));
+        }
+        
+        function moveStick(x, y) {
+            // Calculate distance from center
+            const dx = x - centerX;
+            const dy = y - centerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Constrain to circle
+            let finalX = x - centerX;
+            let finalY = y - centerY;
+            if (distance > maxDistance) {
+                const angle = Math.atan2(dy, dx);
+                finalX = Math.cos(angle) * maxDistance;
+                finalY = Math.sin(angle) * maxDistance;
+            }
+            
+            // Convert from center coordinates to top/left coordinates
+            const stickLeft = finalX + centerX;
+            const stickTop = finalY + centerY;
+            
+            // Move stick
+            stick.style.left = `${stickLeft}px`;
+            stick.style.top = `${stickTop}px`;
+            
+            // Calculate motor speeds (-1023 to 1023)
+            const forward = 1/0.9*deadzone(-finalY / maxDistance, 0.1);
+            const turn = 1/0.9*deadzone(+finalX / maxDistance, 0.1);
+            
+            // Convert to tank drive
+            let leftMotor = Math.round(1023 * (forward + turn));
+            let rightMotor = Math.round(1023 * (forward - turn));
+            
+            // Constrain values
+            leftMotor = Math.max(-1023, Math.min(1023, leftMotor));
+            rightMotor = Math.max(-1023, Math.min(1023, rightMotor));
+            
+            // Update status display
+            status.textContent = `Left: ${leftMotor}, Right: ${rightMotor}`;
+            
+            // Queue command with throttling
+            queueCommand(leftMotor, rightMotor);
+        }
+        
+        function queueCommand(left, right) {
+            lastCommand = { left, right };
+            lastMoveTime = Date.now();
+            
+            if (!commandPending) {
+                commandPending = true;
+                animationFrameId = requestAnimationFrame(processCommand);
+            }
+        }
+        
+        function processCommand() {
+            const now = Date.now();
+            const timeSinceLastCommand = now - lastCommandTime;
+            const timeSinceLastMove = now - lastMoveTime;
+            
+            // Send command if enough time has passed since last command
+            // or if we haven't moved in a while (to ensure last position is sent)
+            if (timeSinceLastCommand >= THROTTLE_MS || timeSinceLastMove >= IDLE_TIMEOUT_MS) {
+                sendCommand(lastCommand.left, lastCommand.right);
+                lastCommandTime = now;
+                
+                // If still moving or recently moved, queue next frame
+                if (timeSinceLastMove < IDLE_TIMEOUT_MS) {
+                    animationFrameId = requestAnimationFrame(processCommand);
+                } else {
+                    commandPending = false;
+                }
+            } else {
+                // Check again next frame
+                animationFrameId = requestAnimationFrame(processCommand);
+            }
+        }
+        
+        // Send command to the robot
+        function sendCommand(left, right) {
+            fetch('/control', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    left: left,
+                    right: right
+                })
+            }).catch(console.error);
+        }
+        
+        // Event handlers
+        function handleStart(e) {
+            isDragging = true;
+            handleMove(e);
+        }
+        
+        function handleMove(e) {
+            if (!isDragging) return;
+            
+            const rect = joystickArea.getBoundingClientRect();
+            const pageX = e.type.startsWith('touch') ? e.touches[0].pageX : e.pageX;
+            const pageY = e.type.startsWith('touch') ? e.touches[0].pageY : e.pageY;
+            
+            moveStick(
+                pageX - rect.left,
+                pageY - rect.top
+            );
+        }
+        
+        function handleEnd() {
+            isDragging = false;
+            moveStick(centerX, centerY);
+        }
+        
+        // Clean up any pending animation frame when stopping
+        function cleanup() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                commandPending = false;
+            }
+        }
+        
+        // Stop button
+        stopBtn.addEventListener('click', () => {
+            cleanup();
+            moveStick(centerX, centerY);
+        });
+        
+        // Touch events
+        joystickArea.addEventListener('touchstart', handleStart);
+        joystickArea.addEventListener('touchmove', handleMove);
+        joystickArea.addEventListener('touchend', handleEnd);
+        
+        // Mouse events
+        joystickArea.addEventListener('mousedown', handleStart);
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleEnd);
+        
+        // Initialize on load
+        window.addEventListener('load', initJoystick);
+        window.addEventListener('resize', initJoystick);
+        
+        // Clean up on page unload
+        window.addEventListener('unload', cleanup);
+    </script>
+</body>
+</html>
