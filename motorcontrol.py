@@ -53,6 +53,36 @@ class DistanceMonitor:
 
 from socketserver import ThreadingMixIn
 
+class ReverseBeeper:
+    def __init__(self, buzzer):
+        self.buzzer = buzzer
+        self._running = False
+        self._thread = None
+
+    def start(self):
+        """Start the beeping pattern"""
+        if not self._running:
+            self._running = True
+            self._thread = threading.Thread(target=self._beep_loop)
+            self._thread.daemon = True
+            self._thread.start()
+
+    def stop(self):
+        """Stop the beeping pattern"""
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=1)
+            self._thread = None
+        self.buzzer.off()
+
+    def _beep_loop(self):
+        """Beep pattern like a reversing truck"""
+        while self._running:
+            self.buzzer.on()
+            time.sleep(0.2)  # Beep duration
+            self.buzzer.off()
+            time.sleep(0.3)  # Pause between beeps
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
     daemon_threads = True
@@ -61,11 +91,12 @@ class RobotControlHandler(BaseHTTPRequestHandler):
     # Class variables to store robot and sensor instances
     robot = CamJamKitRobot()
     buzzer = Buzzer(4)
+    reverse_beeper = ReverseBeeper(buzzer)
     distance_monitor = DistanceMonitor()
     distance_monitor.start()
-    
+
     last_command = (0.0, 0.0)
-    
+
     control_lock = threading.Lock()
     
     # Enable HTTP/1.1 protocol
@@ -115,6 +146,7 @@ class RobotControlHandler(BaseHTTPRequestHandler):
 
             # Stop robot and cleanup
             self.robot.stop()
+            self.reverse_beeper.stop()
             self.distance_monitor.stop()
 
             # Send response
@@ -188,17 +220,17 @@ class RobotControlHandler(BaseHTTPRequestHandler):
         """Control the robot motors with safety features and turning in place support."""
 
         print(f'tiggering motor control with {left} {right} {distance}')
-            
+
         if left < -0.01 and right < -0.01:
-            cls.buzzer.on()
+            cls.reverse_beeper.start()
         else:
-            cls.buzzer.off()
+            cls.reverse_beeper.stop()
 
         # Stop if values are close to zero
         if abs(left) < 0.1 and abs(right) < 0.1:
             cls.robot.stop()
             return
-            
+
         # Prevent forward motion if too close to obstacle
         if distance < DISTANCE_THRESHOLD:  # Less than 10cm
             left = min(0, left)
@@ -222,6 +254,7 @@ def run(handler_class=RobotControlHandler, port=8000):
     except KeyboardInterrupt:
         print('\nShutting down server...')
         handler_class.robot.stop()
+        handler_class.reverse_beeper.stop()
         handler_class.distance_monitor.stop()
         httpd.server_close()
 
