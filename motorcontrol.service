@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=albert
-WorkingDirectory=/home/albert
-ExecStart=/usr/bin/python3 /home/albert/motorcontrol.py
+User=pi
+WorkingDirectory=/home/pi
+ExecStart=/usr/bin/python3 /home/pi/motorcontrol.py
 Restart=always
 RestartSec=5
 
