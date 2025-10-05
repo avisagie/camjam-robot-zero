@@ -110,7 +110,30 @@ class RobotControlHandler(BaseHTTPRequestHandler):
             
 
     def do_POST(self):
-        if self.path == '/control':          
+        if self.path == '/shutdown':
+            print('Shutdown request received')
+
+            # Stop robot and cleanup
+            self.robot.stop()
+            self.distance_monitor.stop()
+
+            # Send response
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            response = bytes(json.dumps({'status': 'shutting down'}), 'utf-8')
+            self.send_header('Content-Length', len(response))
+            self.end_headers()
+            self.wfile.write(response)
+
+            # Wait before shutting down
+            print('Shutting down in 0.5 seconds...')
+            time.sleep(0.5)
+
+            # Shutdown the system
+            import subprocess
+            subprocess.run(['sudo', 'shutdown', '-h', 'now'])
+
+        elif self.path == '/control':
             # Get content length
             content_length = int(self.headers['Content-Length'])
             

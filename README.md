@@ -9,8 +9,7 @@ A little project based on a Raspberry Pi Zero W and the excellent [CamJam Roboti
 4. Distance sensor in front prevents forward motion when it senses a wall closer than 10cm.
 
 ## Todo
-1. Shutdown to cleanly shutdown the pi zero.
-2. Line following mode
+1. Line following mode
 
 ## Notes
 

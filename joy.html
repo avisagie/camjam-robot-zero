@@ -59,9 +59,27 @@
         .button:active {
             background: #0056b3;
         }
+
+        .shutdown-link {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #dc3545;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 8px 12px;
+            border: 1px solid #dc3545;
+            border-radius: 4px;
+        }
+
+        .shutdown-link:active {
+            background: #dc3545;
+            color: white;
+        }
     </style>
 </head>
 <body>
+    <a href="#" id="shutdown" class="shutdown-link">Shutdown Pi</a>
     <h1>Robot Control</h1>
     <div id="joystick-area">
         <div id="stick"></div>
@@ -75,7 +93,8 @@
         const stick = document.getElementById('stick');
         const status = document.getElementById('status');
         const stopBtn = document.getElementById('stop');
-        
+        const shutdownBtn = document.getElementById('shutdown');
+
         let isDragging = false;
         let centerX, centerY;
         let maxDistance;
@@ -227,7 +246,15 @@
             cleanup();
             moveStick(centerX, centerY);
         });
-        
+
+        // Shutdown link
+        shutdownBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            fetch('/shutdown', {
+                method: 'POST'
+            }).catch(console.error);
+        });
+
         // Touch events
         joystickArea.addEventListener('touchstart', handleStart);
         joystickArea.addEventListener('touchmove', handleMove);
