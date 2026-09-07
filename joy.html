@@ -60,6 +60,14 @@
             background: #0056b3;
         }
 
+        #crazy {
+            background: #6f42c1;
+        }
+
+        #crazy:active {
+            background: #4b2a86;
+        }
+
         .shutdown-link {
             position: absolute;
             top: 20px;
@@ -86,6 +94,7 @@
     </div>
     <div id="status">Stopped</div>
     <button id="stop" class="button">STOP</button>
+    <button id="crazy" class="button">CRAZY!</button>
 
     <script>
         const scaleFactor = 300.0 / (300-40);
@@ -93,6 +102,7 @@
         const stick = document.getElementById('stick');
         const status = document.getElementById('status');
         const stopBtn = document.getElementById('stop');
+        const crazyBtn = document.getElementById('crazy');
         const shutdownBtn = document.getElementById('shutdown');
 
         let isDragging = false;
@@ -245,6 +255,16 @@
         stopBtn.addEventListener('click', () => {
             cleanup();
             moveStick(centerX, centerY);
+        });
+
+        // Crazy button: server stops the motors and starts flashing the LEDs.
+        // Deliberately doesn't touch the joystick/send a /control command here -
+        // that would immediately cancel crazy state. Any later joystick move or
+        // STOP does send one, which is what ends crazy state.
+        crazyBtn.addEventListener('click', () => {
+            fetch('/crazy', {
+                method: 'POST'
+            }).catch(console.error);
         });
 
         // Shutdown link

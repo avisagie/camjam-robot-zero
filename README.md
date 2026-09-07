@@ -10,6 +10,8 @@ A Python HTTP server ([`motorcontrol.py`](motorcontrol.py)) drives the robot via
 3. Beeps while reversing.
 4. Front-facing distance sensor blocks forward motion when an obstacle is closer than 15cm.
 5. Shutdown button on the UI cleanly stops the robot and powers down the Pi, to reduce the risk of filesystem corruption from a hard power-off.
+6. Status LEDs: blue (GPIO 27) lit while moving, red (GPIO 22) lit while stationary — exactly one is lit at all times.
+7. "CRAZY!" button on the UI stops the motors immediately and alternates both LEDs every 200ms, until the next joystick move or STOP.
 
 ## Running
 
@@ -21,10 +23,6 @@ Serves on port 8000; browse to `http://<pi-address>:8000/`. See [`motorcontrol.s
 
 ## Todo
 1. Line following mode
-2. Status LEDs + crazy-state button (not yet implemented — wiring is ready, see GPIO Pinout below):
-   - Blue LED (GPIO 27) on whenever the robot is moving (any non-zero motor command); red LED (GPIO 22) on whenever it's stationary. Exactly one of the two is lit at all times.
-   - Add a button to `joy.html` (UI element, not a physical GPIO button) that puts the robot into "crazy state": motors stop immediately, and the two LEDs alternate flashing every 200ms.
-   - Crazy state ends as soon as any control input is given (joystick movement or the stop button) — normal LED behavior (moving/stationary) resumes from there.
 
 ## Notes
 
