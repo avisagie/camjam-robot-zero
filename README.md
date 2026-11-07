@@ -10,7 +10,7 @@ A Python HTTP server ([`motorcontrol.py`](motorcontrol.py)) drives the robot via
 3. Beeps while reversing.
 4. Front-facing distance sensor blocks forward motion when an obstacle is closer than 15cm.
 5. Shutdown button on the UI cleanly stops the robot and powers down the Pi, to reduce the risk of filesystem corruption from a hard power-off.
-6. Status LEDs: blue (GPIO 27) lit while moving, red (GPIO 22) lit while stationary — exactly one is lit at all times.
+6. Status LEDs: blue (GPIO 27) and red (GPIO 22) are off normally and only light (flashing) in crazy state.
 7. "CRAZY!" button on the UI stops the motors immediately and alternates both LEDs every 200ms, until the next joystick move or STOP.
 
 ## Running
@@ -42,8 +42,11 @@ The CamJam motor controller board sits on top of the Pi Zero's 40-pin header but
 | 10 | 19 | Left motor | - |
 | 17 | 11 | Distance sensor (trigger) | - |
 | 18 | 12 | Distance sensor (echo) | - |
-| 22 | 15 | Red LED (stationary indicator) | 220Ω (red-red-brown-gold) |
-| 27 | 13 | Blue LED (moving indicator) | 100Ω (brown-black-brown-gold) |
+| 22 | 15 | Red LED (crazy indicator) | 220Ω (red-red-brown-gold) |
+| 5 | 29 | Red drive LED (stopped) | 330Ω (orange-orange-brown-gold) |
+| 6 | 31 | Yellow drive LED (flashes with others when reversing) | 330Ω (orange-orange-brown-gold) |
+| 13 | 33 | Green drive LED (go) | 330Ω (orange-orange-brown-gold) |
+| 27 | 13 | Blue LED (crazy indicator) | 100Ω (brown-black-brown-gold) |
 
 Free pins remaining in the passed-through range: GPIO 2, 3 (I2C — avoid unless needed), 14, 15 (UART — avoid, serial console), 23, 24, 25, 11.
 

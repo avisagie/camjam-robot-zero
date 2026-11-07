@@ -2,6 +2,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
 from gpiozero import CamJamKitRobot, DistanceSensor, Buzzer, LED
 import os
+import random
 import threading
 import time
 
@@ -84,7 +85,7 @@ class ReverseBeeper:
             time.sleep(0.3)  # Pause between beeps
 
 class StatusLeds:
-    """Blue LED while moving, red while stationary; the two alternate-flash in 'crazy' mode."""
+    """Both LEDs off normally; they alternate-flash only in 'crazy' mode."""
     FLASH_INTERVAL_S = 0.2
 
     def __init__(self, blue_pin, red_pin):
@@ -92,11 +93,6 @@ class StatusLeds:
         self.red = LED(red_pin)
         self._flashing = False
         self._thread = None
-
-    def set_moving(self, moving):
-        """Light exactly one LED, reflecting whether the robot is currently moving."""
-        self.blue.value = moving
-        self.red.value = not moving
 
     def start_flashing(self):
         """Begin alternating both LEDs every FLASH_INTERVAL_S until stop_flashing()."""
@@ -112,6 +108,8 @@ class StatusLeds:
         self._flashing = False
         self._thread.join(timeout=1)
         self._thread = None
+        self.blue.off()
+        self.red.off()
 
     def off(self):
         self.stop_flashing()
@@ -126,6 +124,51 @@ class StatusLeds:
             blue_on = not blue_on
             time.sleep(self.FLASH_INTERVAL_S)
 
+class DriveLights:
+    """Red = stopped, green = driving (forward/turning), all three flash randomly while reversing."""
+    FLASH_INTERVAL_S = 0.1
+
+    STOPPED, GO, REVERSING = 'stopped', 'go', 'reversing'
+
+    def __init__(self, red_pin, yellow_pin, green_pin):
+        self.red = LED(red_pin)
+        self.yellow = LED(yellow_pin)
+        self.green = LED(green_pin)
+        self._state = None
+        self._thread = None
+        self.set_state(self.STOPPED)
+
+    def set_state(self, state):
+        if state == self._state:
+            return
+        self._stop_thread()
+        self._state = state
+        if state == self.REVERSING:
+            self._thread = threading.Thread(target=self._flash_loop, daemon=True)
+            self._thread.start()
+        else:
+            self.red.value = state == self.STOPPED
+            self.yellow.off()
+            self.green.value = state == self.GO
+
+    def off(self):
+        self._stop_thread()
+        self._state = None
+        for led in (self.red, self.yellow, self.green):
+            led.off()
+
+    def _stop_thread(self):
+        thread, self._thread = self._thread, None
+        if thread:
+            self._state = None  # tells the loop to exit
+            thread.join(timeout=1)
+
+    def _flash_loop(self):
+        while self._state == self.REVERSING:
+            for led in (self.red, self.yellow, self.green):
+                led.value = random.random() < 0.5
+            time.sleep(self.FLASH_INTERVAL_S)
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
     daemon_threads = True
@@ -138,7 +181,7 @@ class RobotControlHandler(BaseHTTPRequestHandler):
     distance_monitor = DistanceMonitor()
     distance_monitor.start()
     status_leds = StatusLeds(blue_pin=27, red_pin=22)
-    status_leds.set_moving(False)  # stationary at startup
+    drive_lights = DriveLights(red_pin=5, yellow_pin=6, green_pin=13)
 
     last_command = (0.0, 0.0)
     crazy = False  # True while in crazy state: motors stopped, LEDs alternate-flashing
@@ -195,6 +238,7 @@ class RobotControlHandler(BaseHTTPRequestHandler):
             self.reverse_beeper.stop()
             self.distance_monitor.stop()
             self.status_leds.off()
+            self.drive_lights.off()
 
             # Send response
             self.send_response(200)
@@ -219,6 +263,7 @@ class RobotControlHandler(BaseHTTPRequestHandler):
                 RobotControlHandler.crazy = True
                 self.robot.stop()
                 self.reverse_beeper.stop()
+                self.drive_lights.set_state(DriveLights.STOPPED)
             self.status_leds.start_flashing()
 
             response = bytes(json.dumps({'status': 'crazy'}), 'utf-8')
@@ -302,8 +347,15 @@ class RobotControlHandler(BaseHTTPRequestHandler):
             left = min(0, left)
             right = min(0, right)
 
-        # Set motor speeds and update the moving/stationary indicator LEDs
-        cls.status_leds.set_moving(left != 0 or right != 0)
+        # Update drive lights from the final (post-safety-clamp) values
+        if left == 0 and right == 0:
+            cls.drive_lights.set_state(DriveLights.STOPPED)
+        elif left < -0.01 and right < -0.01:
+            cls.drive_lights.set_state(DriveLights.REVERSING)
+        else:
+            cls.drive_lights.set_state(DriveLights.GO)
+
+        # Set motor speeds
         cls.robot.value = (left, right)
         print(f"Final motor values: {left:.2f}:{right:.2f}")
     
@@ -324,6 +376,7 @@ def run(handler_class=RobotControlHandler, port=8000):
         handler_class.reverse_beeper.stop()
         handler_class.distance_monitor.stop()
         handler_class.status_leds.off()
+        handler_class.drive_lights.off()
         httpd.server_close()
 
 if __name__ == '__main__':

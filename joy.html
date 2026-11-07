@@ -239,6 +239,10 @@
         }
         
         function handleEnd() {
+            // mouseup is bound to the whole document; ignore it unless a drag
+            // was in progress, or clicking any button would send a /control
+            // that cancels crazy state.
+            if (!isDragging) return;
             isDragging = false;
             moveStick(centerX, centerY);
         }
